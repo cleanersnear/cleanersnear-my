@@ -7,11 +7,57 @@ import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import Image from 'next/image'
 import Script from 'next/script'
 
+// Define a proper type for the form data
+interface FeedbackFormData {
+  feedbackOption: string;
+  rating: number;
+  feedback: string;
+  bookingNumber: string;
+  name: string;
+  email: string;
+}
+
 const FEEDBACK_OPTIONS = [
   { value: 'great', label: 'Great', color: 'bg-emerald-50 text-emerald-600', icon: '👍' },
   { value: 'ok', label: 'Okay', color: 'bg-amber-50 text-amber-600', icon: '👌' },
   { value: 'reclean', label: 'Needs reclean', color: 'bg-rose-50 text-rose-600', icon: '🧹' },
 ]
+
+// Updated function with proper type annotation
+const createNotification = async (
+  formData: FeedbackFormData, 
+  feedbackId: string, 
+  bookingId?: string | null
+) => {
+  const supabase = createClientComponentClient()
+  
+  try {
+    await supabase
+      .from('notifications')
+      .insert([{
+        type: 'feedback',
+        title: 'New Feedback Received',
+        content: `Feedback from ${formData.name || 'Customer'}: ${formData.feedbackOption} (${formData.rating} stars)`,
+        booking_id: bookingId || null,
+        feedback_id: feedbackId,
+        status: 'unread',
+        metadata: {
+          feedbackOption: formData.feedbackOption,
+          rating: formData.rating,
+          feedback: formData.feedback,
+          name: formData.name,
+          email: formData.email,
+          bookingNumber: formData.bookingNumber,
+          submittedAt: new Date().toISOString(),
+        },
+        created_at: new Date().toISOString(),
+      }])
+  } catch (error) {
+    console.error('Failed to create notification:', error)
+    // We don't want to break the feedback submission if notification fails
+    // So just log the error and continue
+  }
+}
 
 function FeedbackForm() {
   const searchParams = useSearchParams()
@@ -120,7 +166,8 @@ function FeedbackForm() {
     }
     
     try {
-      const { error } = await supabase
+      // Insert feedback and get the returned ID
+      const { data: feedbackData, error } = await supabase
         .from('feedback')
         .insert([{
           booking_number: form.bookingNumber,
@@ -131,8 +178,34 @@ function FeedbackForm() {
           email: form.email,
           created_at: new Date().toISOString()
         }])
+        .select('id') // Request the ID of the newly inserted row
         
       if (error) throw error
+      
+      // Extract the feedback ID from the returned data
+      const feedbackId = feedbackData?.[0]?.id
+      
+      if (!feedbackId) {
+        console.error('Feedback was created but no ID was returned')
+      }
+
+      // Get booking ID if we have a booking number
+      let bookingId = null
+      if (form.bookingNumber) {
+        const { data: booking } = await supabase
+          .from('bookings')
+          .select('id')
+          .eq('booking_number', form.bookingNumber)
+          .single()
+
+        bookingId = booking?.id || null
+      }
+      
+      // Create notification with the feedback data and feedback ID
+      if (feedbackId) {
+        await createNotification(form, feedbackId, bookingId)
+      }
+      
       setSuccess(true)
     } catch (err: unknown) {
       const errorMessage = 
