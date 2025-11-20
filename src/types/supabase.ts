@@ -74,28 +74,6 @@ export type Database = {
           updated_at?: string
         }
       }
-      google_review_intents: {
-        Row: {
-          id: string
-          customer_name: string
-          customer_email: string
-          rating: number
-          review_text: string
-          completed_locations: string[]
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          customer_name: string
-          customer_email: string
-          rating: number
-          review_text: string
-          completed_locations?: string[]
-          created_at?: string
-          updated_at?: string
-        }
-      }
     }
   }
 } 
