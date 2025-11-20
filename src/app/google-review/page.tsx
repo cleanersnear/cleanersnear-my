@@ -49,6 +49,7 @@ declare global {
         }
       }
     }
+    __googleSignInTimeout?: NodeJS.Timeout
   }
 }
 
@@ -65,32 +66,77 @@ export default function GoogleReviewPage() {
   const [currentLocationIndex, setCurrentLocationIndex] = useState(0)
   const [countdown, setCountdown] = useState(10)
   const [isLoadingGoogle, setIsLoadingGoogle] = useState(true)
+  const [redirectCountdown, setRedirectCountdown] = useState(5)
+
+  // Auto-redirect countdown effect
+  useEffect(() => {
+    if (redirectCountdown > 0 && redirectCountdown < 5) {
+      const timer = setTimeout(() => {
+        setRedirectCountdown(redirectCountdown - 1)
+      }, 1000)
+      return () => clearTimeout(timer)
+    } else if (redirectCountdown === 0) {
+      window.location.href = '/feedback'
+    }
+  }, [redirectCountdown])
 
   // Initialize Google Sign-In
   useEffect(() => {
     const initializeGoogleSignIn = () => {
       if (typeof window !== 'undefined' && window.google) {
         try {
-          // Get Google Client ID from environment variable or use test ID
-          const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '407408718192.apps.googleusercontent.com'
+          // Get Google Client ID from environment variable
+          const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
+          
+          if (!clientId) {
+            console.error('Google Client ID not configured')
+            setIsLoadingGoogle(false)
+            setRedirectCountdown(4)
+            return
+          }
           
           window.google.accounts.id.initialize({
             client_id: clientId,
             callback: handleGoogleCallback,
-            auto_select: true, // Auto-select if user is already signed in
+            auto_select: false,
             cancel_on_tap_outside: false
           })
           
-          // Try to show the One Tap UI if user is already signed in
+          setIsLoadingGoogle(false)
+          
+          // Show the One Tap UI
+          // Note: prompt() may fail with NetworkError if domains aren't authorized
           window.google.accounts.id.prompt()
           
-          setIsLoadingGoogle(false)
+          // Set a backup timeout - if user doesn't sign in within 3 seconds,
+          // likely means OAuth error occurred (NetworkError)
+          const promptTimeout = setTimeout(() => {
+            // If still on welcome step (not moved to form), assume error
+            console.log('Google Sign-In appears to have failed - redirecting to feedback')
+            setRedirectCountdown(4)
+          }, 3000)
+          
+          // Store timeout reference to clear it if user signs in successfully
+          if (typeof window !== 'undefined') {
+            window.__googleSignInTimeout = promptTimeout
+          }
         } catch (error) {
           console.error('Error initializing Google Sign-In:', error)
           setIsLoadingGoogle(false)
+          // Auto-redirect to feedback after 5 seconds if error
+          setRedirectCountdown(4)
         }
       }
     }
+
+    // Timeout to catch if Google Sign-In script fails to load
+    const loadTimeout = setTimeout(() => {
+      if (isLoadingGoogle) {
+        console.error('Google Sign-In script failed to load in time')
+        setIsLoadingGoogle(false)
+        setRedirectCountdown(4)
+      }
+    }, 10000) // 10 second timeout
 
     const script = document.createElement('script')
     script.src = 'https://accounts.google.com/gsi/client'
@@ -98,12 +144,24 @@ export default function GoogleReviewPage() {
     script.defer = true
     
     script.onload = () => {
+      clearTimeout(loadTimeout)
       initializeGoogleSignIn()
+    }
+    
+    script.onerror = () => {
+      clearTimeout(loadTimeout)
+      console.error('Failed to load Google Sign-In script')
+      setIsLoadingGoogle(false)
+      setRedirectCountdown(4)
     }
     
     document.body.appendChild(script)
 
     return () => {
+      clearTimeout(loadTimeout)
+      if (typeof window !== 'undefined' && window.__googleSignInTimeout) {
+        clearTimeout(window.__googleSignInTimeout)
+      }
       if (document.body.contains(script)) {
         document.body.removeChild(script)
       }
@@ -112,7 +170,18 @@ export default function GoogleReviewPage() {
   }, [])
 
   const handleGoogleCallback = (response: { credential: string }) => {
+    // Clear the redirect timeout since user signed in successfully
+    if (typeof window !== 'undefined' && window.__googleSignInTimeout) {
+      clearTimeout(window.__googleSignInTimeout)
+    }
+
     try {
+      if (!response || !response.credential) {
+        console.error('No credential received from Google')
+        setRedirectCountdown(4)
+        return
+      }
+
       // Decode JWT token to get user info
       const base64Url = response.credential.split('.')[1]
       const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
@@ -138,7 +207,8 @@ export default function GoogleReviewPage() {
       setStep('form')
     } catch (error) {
       console.error('Error processing Google sign-in:', error)
-      alert('Failed to sign in with Google. Please try again.')
+      // Redirect to feedback form instead of showing alert
+      setRedirectCountdown(4)
     }
   }
 
@@ -304,9 +374,67 @@ export default function GoogleReviewPage() {
               </div>
             )}
 
-            <p className="text-xs text-gray-500 mt-4">
-              🔒 Secure sign-in with your Google account • We&apos;ll auto-fill your details
-            </p>
+            {redirectCountdown < 5 && redirectCountdown > 0 && (
+              <div className="w-full space-y-3 animate-in fade-in duration-500">
+                <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-5">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0 w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center">
+                      <svg className="w-6 h-6 text-yellow-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd"/>
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-base font-semibold text-yellow-900 mb-1">
+                        Google Sign-In Not Available
+                      </h3>
+                      <p className="text-sm text-yellow-800 mb-3">
+                        We&apos;re having trouble connecting to Google. Don&apos;t worry - you can still leave feedback using our regular form!
+                      </p>
+                      <div className="flex items-center gap-2 text-sm text-yellow-700">
+                        <div className="w-5 h-5 border-2 border-yellow-600 border-t-transparent rounded-full animate-spin"></div>
+                        <span>Redirecting in {redirectCountdown} seconds...</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <a
+                  href="/feedback"
+                  className="w-full flex items-center justify-center gap-2 bg-indigo-600 text-white font-semibold py-3.5 px-6 rounded-lg hover:bg-indigo-700 transition-all shadow-lg hover:shadow-xl"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                  </svg>
+                  Go to Feedback Form Now
+                </a>
+              </div>
+            )}
+
+            {!isLoadingGoogle && redirectCountdown === 5 && (
+              <>
+                <p className="text-xs text-gray-500 mt-4">
+                  🔒 Secure sign-in with your Google account • We&apos;ll auto-fill your details
+                </p>
+                
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <p className="text-xs text-gray-600 text-center mb-3">
+                    Prefer not to sign in with Google?
+                  </p>
+                  <a
+                    href="/feedback"
+                    className="w-full flex items-center justify-center gap-2 text-sm text-indigo-600 hover:text-indigo-800 font-medium transition"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                    </svg>
+                    Use Regular Feedback Form
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </a>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -614,4 +742,5 @@ export default function GoogleReviewPage() {
     </div>
   )
 }
+
 
