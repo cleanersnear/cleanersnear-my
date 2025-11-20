@@ -38,7 +38,7 @@ export const BUSINESS_LOCATIONS: BusinessLocation[] = [
   {
     id: 'epping',
     name: 'Cleaning Professionals - Epping',
-    address: '6 Eva Pl, Epping VIC 3076, Australia',
+    address: 'Epping VIC 3076, Australia',
     placeId: 'CUm3TZyufX2PEBM', // Extracted from g.page URL
     reviewUrl: 'https://g.page/r/CUm3TZyufX2PEBM/review'
   }

@@ -235,13 +235,23 @@ export default function GoogleReviewPage() {
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
         <div className="bg-white rounded-2xl shadow-xl p-8 max-w-lg w-full">
           <div className="flex flex-col items-center">
+            {/* Google Connected Indicator */}
+            <div className="flex justify-end w-full mb-6">
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 border border-green-200 rounded-full">
+                <svg className="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/>
+                </svg>
+                <span className="text-xs font-medium text-green-700">Connected</span>
+              </div>
+            </div>
+
             <Image 
               src="/logo.webp" 
               alt="Cleaning Professionals" 
               width={120} 
               height={40} 
               priority
-              className="mb-6"
+              className="mb-8"
             />
             
             <h2 className="text-2xl font-bold text-gray-900 mb-2 text-center">
